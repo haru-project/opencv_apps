@@ -151,8 +151,11 @@ class FaceDetectionNodelet : public opencv_apps::Nodelet
       for (const cv::Rect& face : faces)
       {
         cv::Point center(face.x + face.width / 2, face.y + face.height / 2);
-        cv::ellipse(frame, center, cv::Size(face.width / 2, face.height / 2), 0, 0, 360, cv::Scalar(255, 0, 255), 2, 8,
+        //SARA: UNCOMMENT IF WE WANT TO SHOW FACE CIRCLE WITH THE DEBUG IMAGE
+        if (debug_view_){
+          cv::ellipse(frame, center, cv::Size(face.width / 2, face.height / 2), 0, 0, 360, cv::Scalar(255, 0, 255), 2, 8,
                     0);
+        }
         opencv_apps::Face face_msg;
         face_msg.face.x = center.x;
         face_msg.face.y = center.y;
@@ -161,6 +164,7 @@ class FaceDetectionNodelet : public opencv_apps::Nodelet
 
         cv::Mat face_roi = frame_gray(face);
         std::vector<cv::Rect> eyes;
+        
 
 //-- In each face, detect eyes
 #ifndef CV_VERSION_EPOCH
@@ -173,8 +177,9 @@ class FaceDetectionNodelet : public opencv_apps::Nodelet
         {
           cv::Point eye_center(face.x + eye.x + eye.width / 2, face.y + eye.y + eye.height / 2);
           int radius = cvRound((eye.width + eye.height) * 0.25);
-          cv::circle(frame, eye_center, radius, cv::Scalar(255, 0, 0), 3, 8, 0);
-
+          if (debug_view_){
+            cv::circle(frame, eye_center, radius, cv::Scalar(255, 0, 0), 3, 8, 0);
+          }
           opencv_apps::Rect eye_msg;
           eye_msg.x = eye_center.x;
           eye_msg.y = eye_center.y;
@@ -199,9 +204,20 @@ class FaceDetectionNodelet : public opencv_apps::Nodelet
       msg_pub_.publish(faces_msg);
       if (!faces.empty())
       {
+        //CHANGED BY SARA SO IT CROPS LESS OF THE IMAGE BUT KEEPS SOME AREA AROUND THE FACE AS WELL
+        try{
+        cv::Mat cropped_image = frame(cv::Range(faces_msg.faces[0].face.y-faces_msg.faces[0].face.height, faces_msg.faces[0].face.y + faces_msg.faces[0].face.height), cv::Range(faces_msg.faces[0].face.x-faces_msg.faces[0].face.width, faces_msg.faces[0].face.x + faces_msg.faces[0].face.width));
         sensor_msgs::Image::Ptr out_face_img =
-            cv_bridge::CvImage(msg->header, sensor_msgs::image_encodings::BGR8, face_image).toImageMsg();
-        face_img_pub_.publish(out_face_img);
+            cv_bridge::CvImage(msg->header, sensor_msgs::image_encodings::BGR8, cropped_image).toImageMsg();
+          //Try to crop less the original image
+          face_img_pub_.publish(out_face_img);
+        }
+        catch (cv::Exception& e)
+        {
+          sensor_msgs::Image::Ptr out_face_img = cv_bridge::CvImage(msg->header, sensor_msgs::image_encodings::BGR8, face_image).toImageMsg();
+          //Try to crop less the original image
+          face_img_pub_.publish(out_face_img);
+        }
       }
     }
     catch (cv::Exception& e)
